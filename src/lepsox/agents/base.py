@@ -15,7 +15,7 @@ class BaseValidator:
 
     Supports both deterministic and AI-powered validation:
     - use_ai=False: Simple Python logic, fast, no LLM needed
-    - use_ai=True: Inherits from CrewAI Agent, can use LLM for complex tasks
+    - use_ai=True: Uses CrewAI Agent for complex tasks (via composition)
     """
 
     def __init__(self, field_name: str, llm: Optional[Any] = None, use_ai: bool = False):
@@ -30,38 +30,33 @@ class BaseValidator:
         self.field_name = field_name
         self.use_ai = use_ai
         self.llm = llm
+        self._agent = None  # Composition: hold Agent instance
 
-        # Only initialize as CrewAI Agent if we need AI capabilities
+        # Only initialize CrewAI Agent if we need AI capabilities
         if use_ai:
             if not llm:
                 raise ValueError(f"{field_name}Validator requires llm when use_ai=True")
 
-            # Initialize Agent parent class
-            # Note: We can't use super().__init__() because we're not always inheriting from Agent
-            # Instead, we manually set Agent attributes when needed
-            self._init_as_agent(field_name, llm)
+            # Create Agent instance (composition, not inheritance)
+            self._agent = Agent(
+                role=f'{field_name} Validator',
+                goal=f'Validate and improve {field_name} field according to LepSoc standards',
+                backstory=f'Expert validator for {field_name} in Lepidopterist Society data, '
+                         f'with deep knowledge of field standards and best practices',
+                llm=llm,
+                allow_delegation=False,
+                verbose=False  # Set to True for debugging AI validators
+            )
+
+            # Set these for compatibility
+            self.role = self._agent.role
+            self.goal = self._agent.goal
+            self.backstory = self._agent.backstory
         else:
             # Just a regular Python class - no Agent overhead
             self.role = f'{field_name} Validator'
             self.goal = f'Validate {field_name} field'
             self.backstory = f'Expert validator for {field_name}'
-
-    def _init_as_agent(self, field_name: str, llm: Any):
-        """Initialize as CrewAI Agent (only called when use_ai=True)"""
-        # Make this validator inherit Agent behavior dynamically
-        # This is a bit of Python magic to avoid multiple inheritance issues
-        self.__class__.__bases__ = (Agent,)
-
-        Agent.__init__(
-            self,
-            role=f'{field_name} Validator',
-            goal=f'Validate and improve {field_name} field according to LepSoc standards',
-            backstory=f'Expert validator for {field_name} in Lepidopterist Society data, '
-                     f'with deep knowledge of field standards and best practices',
-            llm=llm,
-            allow_delegation=False,
-            verbose=False  # Set to True for debugging AI validators
-        )
 
     def validate(self, value: Any, row_data: Optional[Dict] = None) -> ValidationResult:
         """
@@ -91,16 +86,16 @@ class BaseValidator:
         Returns:
             str: LLM response
         """
-        if not self.use_ai or not self.llm:
+        if not self.use_ai or not self._agent:
             raise RuntimeError(f"{self.field_name}Validator.execute_ai_task() "
                              f"requires use_ai=True and llm to be provided")
 
         task = Task(
             description=f"{context}\n\n{description}" if context else description,
-            agent=self,
+            agent=self._agent,
             expected_output="Validation result or suggestion"
         )
 
-        # Execute via CrewAI
-        result = self.execute_task(task)
+        # Execute via CrewAI Agent
+        result = self._agent.execute_task(task)
         return str(result).strip()
