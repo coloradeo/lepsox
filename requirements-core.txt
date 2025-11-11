@@ -1,0 +1,34 @@
+# LepSoc Validation System - Core Requirements
+# Minimal dependencies for Sprint 1
+
+# Core CrewAI Framework
+crewai==0.28.8
+langchain>=0.1.16
+langchain-community>=0.0.34
+
+# Local LLM Support
+ollama>=0.3.0,<1
+
+# MCP Protocol Support (for iNaturalist integration)
+mcp>=1.0.0
+
+# Data Processing
+pandas>=2.2.1
+openpyxl>=3.1.2
+numpy>=1.26.4
+
+# HTTP Client
+httpx>=0.25.2
+aiohttp>=3.9.3
+
+# Environment & Config
+python-dotenv>=1.0.0,<1.1.0
+
+# Date/Time Handling
+python-dateutil>=2.9.0
+
+# Logging
+loguru>=0.7.2
+
+# Async Support
+aiofiles>=23.2.1
