@@ -30,9 +30,9 @@ sqlalchemy==2.0.29
 aiosqlite==0.19.0  # Async SQLite
 
 # iNaturalist MCP Integration
-httpx==0.25.2
-aiohttp==3.9.3
-sse-starlette==2.0.0
+httpx>=0.25.2
+aiohttp>=3.9.3
+sse-starlette>=2.0.0
 
 # MCP Protocol Support
 # Note: Install from Anthropic's MCP SDK when available
