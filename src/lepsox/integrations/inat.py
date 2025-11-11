@@ -9,14 +9,22 @@ from ..config import INAT_MCP_URL
 
 
 class INatValidator:
-    """iNaturalist API integration for species/location validation"""
+    """iNaturalist API integration for species/location validation
+
+    Includes caching to avoid repeated API calls during validation runs.
+    """
 
     def __init__(self, server_url: Optional[str] = None):
         self.server_url = server_url or INAT_MCP_URL
 
+        # Caches for validation run
+        self._species_cache: Dict[str, Dict[str, Any]] = {}
+        self._location_cache: Dict[str, Dict[str, Any]] = {}
+        self._record_cache: Dict[str, Dict[str, Any]] = {}
+
     async def check_species(self, genus: str, species: str, family: Optional[str] = None) -> Dict[str, Any]:
         """
-        Validate species against iNaturalist database
+        Validate species against iNaturalist database with caching
 
         Args:
             genus: Genus name
@@ -24,8 +32,13 @@ class INatValidator:
             family: Optional family name for additional validation
 
         Returns:
-            Dict with validation results
+            Dict with validation results including hierarchy info
         """
+        # Check cache first
+        cache_key = f"{genus}_{species}_{family or ''}"
+        if cache_key in self._species_cache:
+            return self._species_cache[cache_key]
+
         async with sse_client(self.server_url) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -41,18 +54,33 @@ class INatValidator:
                     # Check if any result matches
                     for taxon in result['results']:
                         if genus.lower() in taxon.get('name', '').lower():
-                            return {
+                            validated = {
                                 'valid': True,
                                 'taxon_id': taxon['taxon_id'],
                                 'correct_name': taxon['name'],
-                                'common_name': taxon.get('preferred_common_name', '')
+                                'common_name': taxon.get('preferred_common_name', ''),
+                                'family': taxon.get('family'),
+                                'genus': taxon.get('genus'),
+                                'species': taxon.get('species')
                             }
 
-                return {'valid': False, 'error': 'Species not found'}
+                            # Check hierarchy if family provided
+                            if family and taxon.get('family'):
+                                if taxon['family'].lower() != family.lower():
+                                    validated['hierarchy_mismatch'] = True
+                                    validated['suggested_family'] = taxon['family']
+
+                            # Cache and return
+                            self._species_cache[cache_key] = validated
+                            return validated
+
+                not_found = {'valid': False, 'error': 'Species not found'}
+                self._species_cache[cache_key] = not_found
+                return not_found
 
     async def check_location(self, county: str, state: str, country: str) -> Dict[str, Any]:
         """
-        Validate location against iNaturalist places
+        Validate location against iNaturalist places with caching
 
         Args:
             county: County name
@@ -62,6 +90,11 @@ class INatValidator:
         Returns:
             Dict with validation results
         """
+        # Check cache first
+        cache_key = f"{county}_{state}_{country}"
+        if cache_key in self._location_cache:
+            return self._location_cache[cache_key]
+
         async with sse_client(self.server_url) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -74,13 +107,17 @@ class INatValidator:
                 })
 
                 if result.get('results'):
-                    return {
+                    validated = {
                         'valid': True,
                         'place_id': result['results'][0]['id'],
                         'display_name': result['results'][0]['display_name']
                     }
+                    self._location_cache[cache_key] = validated
+                    return validated
 
-                return {'valid': False, 'error': 'Location not found'}
+                not_found = {'valid': False, 'error': 'Location not found'}
+                self._location_cache[cache_key] = not_found
+                return not_found
 
     async def check_record_status(
         self,
@@ -90,7 +127,7 @@ class INatValidator:
         county: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Check if observation is a state or county record
+        Check if observation is a state or county record with caching
 
         Args:
             taxon_id: iNaturalist taxon ID
@@ -101,6 +138,11 @@ class INatValidator:
         Returns:
             Dict with record status information
         """
+        # Check cache first
+        cache_key = f"{taxon_id}_{place_id or ''}_{state or ''}_{county or ''}"
+        if cache_key in self._record_cache:
+            return self._record_cache[cache_key]
+
         async with sse_client(self.server_url) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -124,8 +166,17 @@ class INatValidator:
 
                 # If no observations, it's a new record
                 total = result.get('total_results', 0)
-                return {
+                record_status = {
                     'is_new_record': total == 0,
                     'existing_count': total,
                     'query_url': result.get('query_url', '')
                 }
+
+                self._record_cache[cache_key] = record_status
+                return record_status
+
+    def clear_cache(self):
+        """Clear all caches (useful between validation runs)"""
+        self._species_cache.clear()
+        self._location_cache.clear()
+        self._record_cache.clear()

@@ -14,8 +14,8 @@ from ..config import DATE_FORMAT
 class FirstDateValidator(BaseValidator):
     """Agent 12: Validate First Date field (Column L)"""
 
-    def __init__(self, llm):
-        super().__init__('First Date', llm)
+    def __init__(self):
+        super().__init__('First Date', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -54,8 +54,8 @@ class FirstDateValidator(BaseValidator):
 class LastDateValidator(BaseValidator):
     """Agent 13: Validate Last Date field (Column M)"""
 
-    def __init__(self, llm):
-        super().__init__('Last Date', llm)
+    def __init__(self):
+        super().__init__('Last Date', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -79,8 +79,8 @@ class LastDateValidator(BaseValidator):
 class YearValidator(BaseValidator):
     """Agent 16: Validate Year field (Column P)"""
 
-    def __init__(self, llm):
-        super().__init__('Year', llm)
+    def __init__(self):
+        super().__init__('Year', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)

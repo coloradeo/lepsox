@@ -7,13 +7,14 @@ import re
 
 from .base import BaseValidator
 from ..models.validation_result import ValidationResult
+from ..config import GPS_DECIMAL_PATTERN, GPS_DMS_PATTERN, COMMENT_STYLE_GUIDE
 
 
 class LocationValidator(BaseValidator):
     """Agent 11: Validate Specific Location field (Column K)"""
 
-    def __init__(self, llm):
-        super().__init__('Specific Location', llm)
+    def __init__(self):
+        super().__init__('Specific Location', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -36,8 +37,8 @@ class LocationValidator(BaseValidator):
 class NameValidator(BaseValidator):
     """Agent 14: Validate Name field (Column N)"""
 
-    def __init__(self, llm):
-        super().__init__('Name', llm)
+    def __init__(self):
+        super().__init__('Name', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -59,10 +60,13 @@ class NameValidator(BaseValidator):
 
 
 class CommentValidator(BaseValidator):
-    """Agent 15: Validate Comments field (Column O)"""
+    """Agent 15: Validate Comments field (Column O)
+
+    Uses AI to shorten/standardize comments according to LepSoc style guidelines.
+    """
 
     def __init__(self, llm):
-        super().__init__('Comments', llm)
+        super().__init__('Comments', llm=llm, use_ai=True)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -73,13 +77,26 @@ class CommentValidator(BaseValidator):
 
         comments = str(value).strip()
 
-        if len(comments) > 120:
-            result.is_valid = False
-            result.errors.append(f"Comments exceed 120 characters: {len(comments)}")
+        # Check for GPS coordinates (both decimal and DMS formats)
+        has_decimal_gps = re.search(GPS_DECIMAL_PATTERN, comments)
+        has_dms_gps = re.search(GPS_DMS_PATTERN, comments)
 
-        # Check for GPS coordinates pattern
-        gps_pattern = r'[-+]?\d+\.?\d*,\s*[-+]?\d+\.?\d*'
-        if re.search(gps_pattern, comments):
+        if has_decimal_gps or has_dms_gps:
             result.metadata['has_gps_coords'] = True
+
+        # If exceeds length, use AI to shorten
+        if len(comments) > 120:
+            result.warnings.append(f"Comments exceed 120 characters: {len(comments)}")
+
+            # Use AI to shorten and standardize
+            try:
+                shortened = self.execute_ai_task(
+                    description=f"Shorten this comment to max 120 characters: '{comments}'",
+                    context=COMMENT_STYLE_GUIDE
+                )
+                result.correction = shortened
+                result.metadata['ai_shortened'] = True
+            except Exception as e:
+                result.errors.append(f"Could not automatically shorten comment: {str(e)}")
 
         return result

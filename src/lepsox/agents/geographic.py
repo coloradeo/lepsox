@@ -1,8 +1,9 @@
 """
 Geographic field validators (Zone, Country, State, County)
 """
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import pandas as pd
+import asyncio
 
 from .base import BaseValidator
 from ..models.validation_result import ValidationResult
@@ -12,8 +13,8 @@ from ..config import VALID_ZONES, VALID_COUNTRIES, US_STATES, CAN_PROVINCES, MEX
 class ZoneValidator(BaseValidator):
     """Agent 1: Validate Zone field (Column A)"""
 
-    def __init__(self, llm):
-        super().__init__('Zone', llm)
+    def __init__(self):
+        super().__init__('Zone', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -42,8 +43,8 @@ class ZoneValidator(BaseValidator):
 class CountryValidator(BaseValidator):
     """Agent 2: Validate Country field (Column B)"""
 
-    def __init__(self, llm):
-        super().__init__('Country', llm)
+    def __init__(self):
+        super().__init__('Country', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -70,8 +71,8 @@ class CountryValidator(BaseValidator):
 class StateValidator(BaseValidator):
     """Agent 3: Validate State/Province field (Column C)"""
 
-    def __init__(self, llm):
-        super().__init__('State', llm)
+    def __init__(self):
+        super().__init__('State', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -106,10 +107,14 @@ class StateValidator(BaseValidator):
 
 
 class CountyValidator(BaseValidator):
-    """Agent 8: Validate County field (Column H)"""
+    """Agent 8: Validate County field (Column H)
 
-    def __init__(self, llm):
-        super().__init__('County', llm)
+    Uses iNaturalist to verify County/State/Country alignment.
+    """
+
+    def __init__(self, inat_validator=None):
+        super().__init__('County', use_ai=False)
+        self.inat_validator = inat_validator
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -131,6 +136,32 @@ class CountyValidator(BaseValidator):
             result.warnings.append("Remove 'County/Province/Territory' from name")
             county_cleaned = county.replace('County', '').replace('Province', '').replace('Territory', '').strip()
             result.correction = county_cleaned
+            county = county_cleaned
 
-        result.metadata['needs_inat_check'] = True
+        # iNaturalist validation if validator is provided
+        if self.inat_validator and row_data:
+            state = row_data.get('State', '')
+            country = row_data.get('Country', '')
+
+            if state and country:
+                try:
+                    # Run async check synchronously
+                    inat_result = asyncio.run(
+                        self.inat_validator.check_location(county, state, country)
+                    )
+
+                    if inat_result.get('valid'):
+                        # Location found in iNat
+                        result.metadata['inat_place_id'] = inat_result.get('place_id')
+                        result.metadata['inat_display_name'] = inat_result.get('display_name')
+                    else:
+                        # Location not found
+                        result.warnings.append(
+                            f"Location '{county}, {state}, {country}' not found in iNaturalist"
+                        )
+                        result.metadata['needs_human_review'] = True
+
+                except Exception as e:
+                    result.warnings.append(f"Could not verify location with iNaturalist: {str(e)}")
+
         return result

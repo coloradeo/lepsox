@@ -6,7 +6,7 @@ import pandas as pd
 from crewai import Crew, Task, Process
 from langchain.llms import Ollama
 
-from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, COLUMN_NAMES
+from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, COLUMN_NAMES, INAT_MCP_URL
 from .agents import (
     ZoneValidator, CountryValidator, StateValidator, CountyValidator,
     FamilyValidator, GenusValidator, SpeciesValidator, SubspeciesValidator,
@@ -14,17 +14,22 @@ from .agents import (
     StateRecordValidator, CountyRecordValidator,
     LocationValidator, NameValidator, CommentValidator
 )
+from .integrations import INatValidator
 
 
 class LepSocValidationCrew:
     """Main CrewAI orchestrator for validation"""
 
-    def __init__(self, ollama_url: str = OLLAMA_BASE_URL, ollama_model: str = OLLAMA_MODEL):
+    def __init__(self, ollama_url: str = OLLAMA_BASE_URL, ollama_model: str = OLLAMA_MODEL,
+                 inat_url: str = INAT_MCP_URL):
         # Initialize Ollama LLM
         self.llm = Ollama(
             model=ollama_model,
             base_url=ollama_url
         )
+
+        # Initialize iNaturalist validator (shared across all validators)
+        self.inat_validator = INatValidator(server_url=inat_url)
 
         # Create all validation agents
         self.validators = self._create_validators()
@@ -33,24 +38,46 @@ class LepSocValidationCrew:
         self.column_names = COLUMN_NAMES
 
     def _create_validators(self) -> List:
-        """Create all 16 validation agents"""
+        """Create all 16 validation agents
+
+        Simple deterministic validators (use_ai=False) don't need LLM.
+        AI-powered validators (taxonomic, comments) need LLM for intelligence.
+        Taxonomic validators also get iNat validator for species verification.
+        """
         validators = [
-            ZoneValidator(self.llm),
-            CountryValidator(self.llm),
-            StateValidator(self.llm),
-            FamilyValidator(self.llm),
-            GenusValidator(self.llm),
-            SpeciesValidator(self.llm),
-            SubspeciesValidator(self.llm),
-            CountyValidator(self.llm),
-            StateRecordValidator(self.llm),
-            CountyRecordValidator(self.llm),
-            LocationValidator(self.llm),
-            FirstDateValidator(self.llm),
-            LastDateValidator(self.llm),
-            NameValidator(self.llm),
+            # Geographic (deterministic)
+            ZoneValidator(),
+            CountryValidator(),
+            StateValidator(),
+
+            # Taxonomic (AI-powered for iNat integration)
+            FamilyValidator(self.llm, self.inat_validator),
+            GenusValidator(self.llm, self.inat_validator),
+            SpeciesValidator(self.llm, self.inat_validator),
+            SubspeciesValidator(self.llm, self.inat_validator),
+
+            # Geographic (deterministic, but with iNat location validation)
+            CountyValidator(self.inat_validator),
+
+            # Records (deterministic)
+            StateRecordValidator(),
+            CountyRecordValidator(),
+
+            # Metadata (location and name are deterministic)
+            LocationValidator(),
+
+            # Temporal (deterministic)
+            FirstDateValidator(),
+            LastDateValidator(),
+
+            # Metadata (name is deterministic)
+            NameValidator(),
+
+            # Comments (AI-powered for shortening/standardization)
             CommentValidator(self.llm),
-            YearValidator(self.llm)
+
+            # Temporal (deterministic)
+            YearValidator()
         ]
         return validators
 

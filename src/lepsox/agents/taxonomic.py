@@ -1,8 +1,9 @@
 """
 Taxonomic field validators (Family, Genus, Species, Subspecies)
 """
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import pandas as pd
+import asyncio
 
 from .base import BaseValidator
 from ..models.validation_result import ValidationResult
@@ -12,8 +13,9 @@ from ..config import COMMON_FAMILIES
 class FamilyValidator(BaseValidator):
     """Agent 4: Validate Family field (Column D)"""
 
-    def __init__(self, llm):
-        super().__init__('Family', llm)
+    def __init__(self, llm, inat_validator=None):
+        super().__init__('Family', llm=llm, use_ai=True)
+        self.inat_validator = inat_validator
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -41,8 +43,9 @@ class FamilyValidator(BaseValidator):
 class GenusValidator(BaseValidator):
     """Agent 5: Validate Genus field (Column E)"""
 
-    def __init__(self, llm):
-        super().__init__('Genus', llm)
+    def __init__(self, llm, inat_validator=None):
+        super().__init__('Genus', llm=llm, use_ai=True)
+        self.inat_validator = inat_validator
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -69,10 +72,15 @@ class GenusValidator(BaseValidator):
 
 
 class SpeciesValidator(BaseValidator):
-    """Agent 6: Validate Species field (Column F)"""
+    """Agent 6: Validate Species field (Column F)
 
-    def __init__(self, llm):
-        super().__init__('Species', llm)
+    Uses iNaturalist API to validate genus/species combinations and suggest
+    corrections when hierarchy mismatches are detected.
+    """
+
+    def __init__(self, llm, inat_validator=None):
+        super().__init__('Species', llm=llm, use_ai=True)
+        self.inat_validator = inat_validator
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -93,15 +101,48 @@ class SpeciesValidator(BaseValidator):
         if species != str(value).strip():
             result.correction = species
 
-        result.metadata['needs_inat_check'] = True
+        # iNaturalist validation if validator is provided
+        if self.inat_validator and row_data:
+            genus = row_data.get('Genus', '')
+            family = row_data.get('Family', '')
+
+            if genus:
+                try:
+                    # Run async check synchronously
+                    inat_result = asyncio.run(
+                        self.inat_validator.check_species(genus, species, family)
+                    )
+
+                    if inat_result.get('valid'):
+                        # Species found in iNat
+                        result.metadata['inat_taxon_id'] = inat_result.get('taxon_id')
+                        result.metadata['inat_common_name'] = inat_result.get('common_name')
+
+                        # Check hierarchy
+                        if inat_result.get('hierarchy_mismatch'):
+                            result.warnings.append(
+                                f"Family mismatch: '{family}' should be '{inat_result['suggested_family']}' "
+                                f"based on genus/species"
+                            )
+                            result.metadata['suggested_family'] = inat_result['suggested_family']
+
+                    else:
+                        # Species not found
+                        result.warnings.append(f"Species '{genus} {species}' not found in iNaturalist")
+                        result.metadata['needs_human_review'] = True
+
+                except Exception as e:
+                    result.warnings.append(f"Could not verify with iNaturalist: {str(e)}")
+
         return result
 
 
 class SubspeciesValidator(BaseValidator):
     """Agent 7: Validate Sub-species field (Column G)"""
 
-    def __init__(self, llm):
-        super().__init__('Sub-species', llm)
+    def __init__(self, llm, inat_validator=None):
+        super().__init__('Sub-species', llm=llm, use_ai=True)
+        self.inat_validator = inat_validator
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -120,5 +161,7 @@ class SubspeciesValidator(BaseValidator):
         # Should be lowercase
         if subspecies != str(value).strip():
             result.correction = subspecies
+
+        # Note: iNat subspecies validation could be added here if needed
 
         return result

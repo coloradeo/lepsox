@@ -11,8 +11,8 @@ from ..models.validation_result import ValidationResult
 class StateRecordValidator(BaseValidator):
     """Agent 9: Validate State Record field (Column I)"""
 
-    def __init__(self, llm):
-        super().__init__('State Record', llm)
+    def __init__(self):
+        super().__init__('State Record', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -35,8 +35,8 @@ class StateRecordValidator(BaseValidator):
 class CountyRecordValidator(BaseValidator):
     """Agent 10: Validate County Record field (Column J)"""
 
-    def __init__(self, llm):
-        super().__init__('County Record', llm)
+    def __init__(self):
+        super().__init__('County Record', use_ai=False)
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
