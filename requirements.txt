@@ -3,8 +3,9 @@
 
 # Core CrewAI Framework
 crewai==0.28.8
-langchain==0.1.16
-langchain-community==0.0.34
+langchain>=0.1.16
+langchain-community>=0.0.34
+langchain-core>=0.2.36,<0.3.0
 
 # Local LLM Support
 ollama==0.1.7
