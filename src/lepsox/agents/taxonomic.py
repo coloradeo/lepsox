@@ -138,7 +138,10 @@ class SpeciesValidator(BaseValidator):
 
 
 class SubspeciesValidator(BaseValidator):
-    """Agent 7: Validate Sub-species field (Column G)"""
+    """Agent 7: Validate Sub-species field (Column G)
+
+    Uses iNaturalist API to validate genus/species/subspecies trinomial combinations.
+    """
 
     def __init__(self, llm, inat_validator=None):
         super().__init__('Sub-species', llm=llm, use_ai=True)
@@ -162,6 +165,41 @@ class SubspeciesValidator(BaseValidator):
         if subspecies != str(value).strip():
             result.correction = subspecies
 
-        # Note: iNat subspecies validation could be added here if needed
+        # iNaturalist validation for trinomial name if validator is provided
+        if self.inat_validator and row_data:
+            genus = row_data.get('Genus', '')
+            species = row_data.get('Species', '')
+            family = row_data.get('Family', '')
+
+            if genus and species and subspecies:
+                try:
+                    # Validate trinomial name: genus species subspecies
+                    trinomial = f"{genus} {species} {subspecies}"
+                    inat_result = asyncio.run(
+                        self.inat_validator.check_species(genus, f"{species} {subspecies}", family)
+                    )
+
+                    if inat_result.get('valid'):
+                        # Trinomial found in iNat
+                        result.metadata['inat_taxon_id'] = inat_result.get('taxon_id')
+                        result.metadata['inat_common_name'] = inat_result.get('common_name')
+                        result.metadata['validated_trinomial'] = trinomial
+
+                        # Check hierarchy
+                        if inat_result.get('hierarchy_mismatch'):
+                            result.warnings.append(
+                                f"Family mismatch: '{family}' should be '{inat_result['suggested_family']}' "
+                                f"based on trinomial name"
+                            )
+                            result.metadata['suggested_family'] = inat_result['suggested_family']
+                    else:
+                        # Trinomial not found
+                        result.warnings.append(
+                            f"Subspecies '{trinomial}' not found in iNaturalist"
+                        )
+                        result.metadata['needs_human_review'] = True
+
+                except Exception as e:
+                    result.warnings.append(f"Could not verify subspecies with iNaturalist: {str(e)}")
 
         return result
