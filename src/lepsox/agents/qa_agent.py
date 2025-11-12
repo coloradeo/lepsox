@@ -15,6 +15,9 @@ class RecordQAAgent:
        - If dates are the same, choose the first in the file
     2. County Record Uniqueness: Only one occurrence of each species per county can be marked as a county record
        - Same logic as state records
+    3. Hallucination Detection: Verify LLM-shortened fields don't contain invented information
+       - Check Location and Comments fields for content not in original
+       - Flag hallucinations as errors requiring manual review
     """
 
     def __init__(self):
@@ -161,3 +164,100 @@ class RecordQAAgent:
             if result.get('row_index') == row_idx:
                 return i
         return None
+
+    def validate_hallucinations(self, df: pd.DataFrame, validation_results: List[Dict]) -> List[Dict]:
+        """
+        Detect hallucinations in LLM-shortened fields by checking if shortened text
+        contains words/tokens not present in the original text.
+
+        Checks 'Specific Location' and 'Comments' fields that have ai_shortened metadata.
+
+        Args:
+            df: DataFrame with validated data
+            validation_results: List of validation results from individual row validations
+
+        Returns:
+            Updated validation_results with hallucination errors added
+        """
+        import re
+
+        def extract_tokens(text):
+            """Extract alphanumeric tokens from text (words, numbers, abbreviations)"""
+            text = str(text).upper()
+            # Extract words and numbers, including abbreviations like CR70, SH74
+            tokens = set(re.findall(r'\b[A-Z0-9]+\b', text))
+            return tokens
+
+        # Check each row
+        for i, result in enumerate(validation_results):
+            row_idx = result.get('row_index')
+            if row_idx is None:
+                continue
+
+            # Check Specific Location field
+            if 'Specific Location' in result.get('corrections', {}):
+                field_result = result.get('field_results', {}).get('Specific Location')
+
+                # Only check if it was AI-shortened
+                if field_result and field_result.metadata.get('ai_shortened'):
+                    original = str(df.iloc[i].get('Specific Location', '')).strip()
+                    shortened = result['corrections']['Specific Location']
+
+                    # Extract tokens from both
+                    original_tokens = extract_tokens(original)
+                    shortened_tokens = extract_tokens(shortened)
+
+                    # Find tokens in shortened that aren't in original
+                    hallucinated_tokens = shortened_tokens - original_tokens
+
+                    # Filter out common abbreviations that are valid transformations
+                    valid_abbreviations = {
+                        'LK', 'RV', 'CR', 'MT', 'RD', 'HWY', 'TR', 'SH', 'SR',
+                        'NR', 'N', 'S', 'E', 'W', 'CAMPGD', 'MI', 'KM',
+                        'ESE', 'WSW', 'NNE', 'SSW', 'NW', 'NE', 'SE', 'SW'
+                    }
+                    hallucinated_tokens = hallucinated_tokens - valid_abbreviations
+
+                    if hallucinated_tokens:
+                        result['is_valid'] = False
+                        result['errors'].append(
+                            f"Specific Location: LLM hallucination detected - added content not in original: {', '.join(sorted(hallucinated_tokens))}"
+                        )
+                        result['metadata']['hallucination_detected'] = True
+                        # Remove the correction so original is kept
+                        del result['corrections']['Specific Location']
+
+            # Check Comments field
+            if 'Comments' in result.get('corrections', {}):
+                field_result = result.get('field_results', {}).get('Comments')
+
+                # Only check if it was AI-shortened
+                if field_result and field_result.metadata.get('ai_shortened'):
+                    original = str(df.iloc[i].get('Comments', '')).strip()
+                    shortened = result['corrections']['Comments']
+
+                    # Extract tokens from both
+                    original_tokens = extract_tokens(original)
+                    shortened_tokens = extract_tokens(shortened)
+
+                    # Find tokens in shortened that aren't in original
+                    hallucinated_tokens = shortened_tokens - original_tokens
+
+                    # Filter out common abbreviations
+                    valid_abbreviations = {
+                        'LK', 'RV', 'CR', 'MT', 'RD', 'HWY', 'TR', 'SH', 'SR',
+                        'NR', 'N', 'S', 'E', 'W', 'CAMPGD', 'MI', 'KM',
+                        'LT', 'MV', 'UV', 'NECT', 'OVIPOS', 'BASK'
+                    }
+                    hallucinated_tokens = hallucinated_tokens - valid_abbreviations
+
+                    if hallucinated_tokens:
+                        result['is_valid'] = False
+                        result['errors'].append(
+                            f"Comments: LLM hallucination detected - added content not in original: {', '.join(sorted(hallucinated_tokens))}"
+                        )
+                        result['metadata']['hallucination_detected'] = True
+                        # Remove the correction so original is kept
+                        del result['corrections']['Comments']
+
+        return validation_results

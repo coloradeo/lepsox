@@ -230,7 +230,13 @@ class LepSocValidationCrew:
         print("\n" + "="*50)
         print("Running final QA checks...")
         print("="*50)
+
+        # Check for record uniqueness
         all_results = self.qa_agent.validate_record_uniqueness(df_filtered, all_results)
+
+        # Check for LLM hallucinations
+        all_results = self.qa_agent.validate_hallucinations(df_filtered, all_results)
+
         print("✓ QA checks complete")
 
         # Apply corrections and create dual-column output

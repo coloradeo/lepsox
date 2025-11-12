@@ -60,13 +60,13 @@ Abbreviation Rules:
 - Distance: Remove spaces: "5 KM ESE" → "5KM ESE"
 
 Examples (MUST be 50 characters or less):
-- "Round Lake Road near Tuscarora Lodge at the intersection of County Road 70 and State Highway 74, 5 KM ESE of Fredricksburg"
-  → "Round Lk Rd CR70/SH74, 5KM ESE of Fredricksburg" (49 chars - keeps permanent intersection AND city since space allows)
-- "Bob Richardson Campground Site 22 near Gooseberry Falls"
-  → "nr Gooseberry Falls, S22" (25 chars - permanent geographic feature prioritized)
-- "near Plouff Creek, County Park" → "nr Plouff Cr" (13 chars - creek is permanent)
-- "North of Woodman Creek area" → "N of Woodman Cr" (15 chars)
-- "Highway 61 at mile marker 15" → "Hwy 61 mi 15" (12 chars)
+- "Silver Creek Road near Maple Ridge Lodge at the intersection of County Road 12 and State Highway 29, 3 KM West of Riverside"
+  → "Silver Cr Rd CR12/SH29, 3KM W of Riverside" (43 chars - keeps permanent intersection AND city since space allows)
+- "Thunder Mountain Campground Site 8 near Eagle Falls"
+  → "nr Eagle Falls, S8" (18 chars - permanent geographic feature prioritized)
+- "near Willow Creek, County Park" → "nr Willow Cr" (12 chars - creek is permanent)
+- "South of Birch River area" → "S of Birch Rv" (13 chars)
+- "Interstate 90 at mile marker 42" → "I90 mi 42" (9 chars)
 
 Key Principle: Prioritize findability 50+ years from now. Geographic features and road numbers outlast businesses.
 """
