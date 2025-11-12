@@ -6,7 +6,7 @@ import pandas as pd
 from crewai import Crew, Task, Process
 from langchain.llms import Ollama
 
-from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_KEEP_ALIVE, OLLAMA_TEMPERATURE, COLUMN_NAMES, INAT_MCP_URL
+from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_KEEP_ALIVE, OLLAMA_TEMPERATURE, OLLAMA_NUM_CTX, COLUMN_NAMES, INAT_MCP_URL
 from .agents import (
     ZoneValidator, CountryValidator, StateValidator, CountyValidator,
     FamilyValidator, GenusValidator, SpeciesValidator, SubspeciesValidator,
@@ -23,13 +23,14 @@ class LepSocValidationCrew:
 
     def __init__(self, ollama_url: str = OLLAMA_BASE_URL, ollama_model: str = OLLAMA_MODEL,
                  inat_url: str = INAT_MCP_URL, use_inat: bool = True):
-        # Initialize Ollama LLM with timeout, keep_alive, and temperature settings
+        # Initialize Ollama LLM with timeout, keep_alive, temperature, and context window settings
         self.llm = Ollama(
             model=ollama_model,
             base_url=ollama_url,
             timeout=OLLAMA_TIMEOUT,  # Timeout in seconds
             keep_alive=OLLAMA_KEEP_ALIVE,  # Keep model loaded in memory (e.g., "10m")
-            temperature=OLLAMA_TEMPERATURE  # Lower temperature reduces hallucinations
+            temperature=OLLAMA_TEMPERATURE,  # Lower temperature reduces hallucinations (0.0-1.0)
+            num_ctx=OLLAMA_NUM_CTX  # Context window size in tokens (default 2048, we use 8192)
         )
 
         # Pre-load model into memory with a warm-up call
