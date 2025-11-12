@@ -6,7 +6,7 @@ from typing import List
 
 # Server Configuration
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://192.168.51.99:30068")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama2")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 INAT_MCP_URL = os.getenv("INAT_MCP_URL", "http://192.168.51.99:8811/sse")
 
 # Validation Constants
