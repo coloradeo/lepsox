@@ -41,12 +41,19 @@ Format Rules:
 - NO ELLIPSIS (...) - abbreviate instead
 - Use remaining space wisely - add helpful context if under 50 chars
 
+CONTEXT AWARENESS - CRITICAL:
+- Use context clues to identify proper names vs descriptive words
+- "Big Lake Campground Rd" is a ROAD NAME - abbreviate to "Big Lk Campgd Rd", don't drop "Campground"
+- "Big Lake" vs "Big Lake Campground" are DIFFERENT places - keep the full proper name
+- If removing a word changes the meaning or makes it a different place, DON'T remove it
+- Proper names must stay intact (with abbreviations) - only remove generic descriptors
+
 Abbreviation Rules:
 - Geographic: "Lake" → "Lk", "River" → "Rv", "Creek" → "Cr", "Mountain" → "Mt"
-- Road types: "Road" → "Rd", "Highway" → "Hwy", "Trail" → "Tr"
-- Road designations: "County Road" → "CR", "State Highway" → "SH", "State Route" → "SR"
+- Road types: "Road" → "Rd", "Highway" → "Hwy", "Trail" → "Tr", "Interstate" → "I"
+- Road designations: "County Road" → "CR", "State Highway" → "SH", "State Route" → "SR", "Interstate 70" → "I70"
 - Directions: "near" → "nr", "north of" → "N of", "east" → "E", "west" → "W"
-- Locations: "Campground" → "CG", "Site" → "S", "mile marker" → "mi"
+- Locations: "Campground" → "Campgd", "Site" → "S", "mile marker" → "mi"
 - Distance: Remove spaces: "5 KM ESE" → "5KM ESE"
 
 Examples (MUST be 50 characters or less):

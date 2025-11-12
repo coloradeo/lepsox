@@ -164,16 +164,25 @@ Format Rules:
 - GPS coordinates: Use decimal format (lat,long) or DMS with ° ' "
 - Separate distinct observations with semicolon
 
+Location Abbreviations (when location context is needed in comments):
+- Geographic: "Lake" → "Lk", "River" → "Rv", "Creek" → "Cr", "Mountain" → "Mt"
+- Road types: "Road" → "Rd", "Highway" → "Hwy", "Trail" → "Tr", "Interstate" → "I"
+- Road designations: "County Road" → "CR", "State Highway" → "SH", "Interstate 70" → "I70"
+- Directions: "near" → "nr", "north of" → "N of", "east" → "E", "west" → "W"
+- Locations: "Campground" → "Campgd", "Site" → "S"
+- Distance: Remove spaces: "5 KM ESE" → "5KM ESE"
+
 Preferred Patterns:
 - Behavior: "nect on milkweed", "ovipos on oak", "puddling"
 - Method: "lt", "uv lt", "net", "reared ex larva"
 - Quantity + behavior: "3F nect", "many at bait", "1M patrol"
-- Location modifier: "nr stream", "forest edge", "roadside"
+- Location modifier: "nr stream", "forest edge", "roadside", "nr Gooseberry Falls"
 - Condition: "fresh", "worn", "tattered"
 
 Examples:
 - Good: "2M 1F nect on Asclepias; fresh; lt"
 - Good: "reared ex larva on Quercus rubra"
 - Good: "puddling nr stream; 42.5834,-87.8294"
+- Good: "nr Big Lk Campgd Rd at CR70/SH74"
 - Bad: "Two males and one female nectaring on common milkweed, freshly emerged, captured at light trap"
 """
