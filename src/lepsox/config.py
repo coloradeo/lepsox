@@ -8,7 +8,7 @@ from typing import List
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://192.168.51.99:30068")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b-instruct-q8_0")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "60"))  # Timeout in seconds for LLM calls
-OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "10m")  # Keep model loaded in memory
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "0")  # Disable to force fresh context each call (prevents cross-row contamination)
 OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.0"))  # 0.0 = completely deterministic (0.0-1.0)
 OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "8192"))  # Context window size (tokens)
 INAT_MCP_URL = os.getenv("INAT_MCP_URL", "http://192.168.51.99:8811/sse")
