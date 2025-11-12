@@ -182,11 +182,19 @@ class LepSocValidationCrew:
 
         # Validation results
         all_results = []
+        valid_indices = []  # Track which rows are not blank
 
         print(f"Validating {len(df)} rows...")
 
         # Process each row
         for index, row in df.iterrows():
+            # Skip blank rows (all key fields are empty/NaN)
+            key_fields = ['Family', 'Genus', 'Species']
+            if all(pd.isna(row.get(field)) or str(row.get(field, '')).strip() == '' for field in key_fields):
+                print(f"\nValidating row {index + 1}/{len(df)} - Skipping blank row")
+                continue
+
+            valid_indices.append(index)  # Track non-blank rows
             print(f"\nValidating row {index + 1}/{len(df)}")
             result = self.validate_row(index, row)
             all_results.append(result)
@@ -199,13 +207,16 @@ class LepSocValidationCrew:
             if result['corrections']:
                 print(f"  ✓ Corrections: {len(result['corrections'])} fields")
 
+        # Filter dataframe to only include non-blank rows
+        df_filtered = df.loc[valid_indices].reset_index(drop=True)
+
         # Apply corrections and create dual-column output
-        validated_df = self._apply_corrections(df, all_results)
+        validated_df = self._apply_corrections(df_filtered, all_results)
 
         # Save output with color coding
         if output_path:
             if output_path.endswith('.xlsx'):
-                self._save_excel_with_colors(df, validated_df, all_results, output_path)
+                self._save_excel_with_colors(df_filtered, validated_df, all_results, output_path)
             else:
                 validated_df.to_csv(output_path, index=False)
             print(f"\n✓ Validated file saved to: {output_path}")
@@ -298,7 +309,15 @@ class LepSocValidationCrew:
         passed = sum(1 for r in results if r['is_valid'] and not r['corrections'])
         corrected = sum(1 for r in results if r['corrections'])
         failed = sum(1 for r in results if not r['is_valid'])
-        needs_review = sum(1 for r in results if r['needs_review'])
+
+        # Needs review = rows with errors, warnings, OR real corrections (not just normalizations)
+        needs_review = sum(1 for r in results if
+            not r['is_valid'] or  # Has errors (red cells)
+            r['errors'] or        # Has errors
+            r['warnings'] or      # Has warnings (yellow cells)
+            any(r['field_results'].get(field, {}).correction_type == 'correction'
+                for field in r.get('corrections', {}))  # Has real corrections (orange cells), not just normalizations
+        )
 
         print("\n" + "="*50)
         print("VALIDATION SUMMARY")
