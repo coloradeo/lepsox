@@ -15,26 +15,31 @@ LOCATION_STYLE_GUIDE = """
 LepSoc Specific Location Guidelines:
 
 Format Rules:
-- Maximum 50 characters
-- Use standard abbreviations: nr (near), N of (north of), S of, E of, W of
-- Remove unnecessary words: "at", "the", "located at", "in the vicinity of"
-- Keep essential geographic identifiers: road names, trail names, landmarks
-- Preserve GPS coordinates if present (use decimal format)
-- Remove county/state names (already in other fields)
+- CRITICAL: Maximum 50 characters - count carefully!
+- Use aggressive abbreviations to preserve key information
+- Remove city/town names (already in County/State fields)
+- Remove unnecessary words: "at", "the", "located at", "in the vicinity of", "intersection of"
+- Keep essential identifiers: road names, landmarks, intersections
+- Use slash notation for intersections: CR70/SH74
+- Preserve GPS coordinates if present (decimal format preferred)
+- NO ELLIPSIS (...) - use abbreviations to fit within 50 chars
 
-Abbreviation Priority:
-- Direction: "north of" → "N of", "near" → "nr"
+Abbreviation Rules:
+- Geographic: "Lake" → "Lk", "River" → "Rv", "Creek" → "Cr", "Mountain" → "Mt"
 - Road types: "Road" → "Rd", "Highway" → "Hwy", "Trail" → "Tr"
-- Geographic: "River" → "Rv", "Creek" → "Cr", "Lake" → "Lk", "Mountain" → "Mt"
-- Campground: "Campground" → "CG", "Site" → "S"
+- Road designations: "County Road" → "CR", "State Highway" → "SH", "State Route" → "SR"
+- Directions: "near" → "nr", "north of" → "N of", "east" → "E", "west" → "W"
+- Locations: "Campground" → "CG", "Site" → "S", "mile marker" → "mi"
+- Distance: Remove spaces in measurements: "5 KM ESE" → "5KM ESE"
 
-Examples:
+Examples (MUST be 50 characters or less):
+- "Round Lake Road near Tuscarora Lodge at the intersection of County Road 70 and State Highway 74, 5 KM ESE of Fredricksburg" → "Round Lk Rd nr Tuscarora Lodge, 5KM ESE CR70/SH74"
 - "Bob Richardson Campground Site 22" → "Bob Richardson CG S22"
-- "near Plouff Creek Count" → "nr Plouff Cr Count"
+- "near Plouff Creek County Park" → "nr Plouff Cr County Park"
 - "North of Woodman Creek area" → "N of Woodman Cr"
 - "Highway 61 at mile marker 15" → "Hwy 61 mi 15"
 
-Key Principle: Keep location identifiable but concise. Remove fluff, keep substance.
+Key Principle: Maximize information density. Keep intersections and landmarks, remove redundant city names.
 """
 
 
@@ -65,23 +70,23 @@ class LocationValidator(BaseValidator):
             # Use LLM to automatically shorten
             try:
                 shortened = self.execute_ai_task(
-                    description=f"Shorten this location to EXACTLY 50 characters or less. CRITICAL: Your response MUST be 50 characters or less. Location: '{location}'",
+                    description=f"Shorten this location to EXACTLY 50 characters or less. Use aggressive abbreviations. NO ELLIPSIS. Location: '{location}'",
                     context=LOCATION_STYLE_GUIDE
                 ).strip()
 
                 # Validate LLM output length
                 if len(shortened) > 50:
-                    # LLM failed to follow instructions, truncate intelligently
-                    result.warnings.append(f"LLM output too long ({len(shortened)} chars), truncating")
-                    shortened = shortened[:47] + "..."
-
-                result.correction = shortened
-                result.correction_type = "correction"  # LLM shortening is a real correction
-                result.metadata['ai_shortened'] = True
+                    # LLM failed to follow instructions - flag for manual review
+                    result.warnings.append(f"LLM output too long ({len(shortened)} chars): {shortened}")
+                    result.errors.append(f"Auto-shortening failed - needs manual review")
+                    result.metadata['needs_manual_shortening'] = True
+                else:
+                    result.correction = shortened
+                    result.correction_type = "correction"  # LLM shortening is a real correction
+                    result.metadata['ai_shortened'] = True
             except Exception as e:
                 result.errors.append(f"Could not automatically shorten location: {str(e)}")
-                # Fallback: just truncate with ellipsis
-                result.metadata['overflow_to_comments'] = location[50:]
+                result.metadata['needs_manual_shortening'] = True
 
         return result
 
