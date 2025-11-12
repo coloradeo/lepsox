@@ -6,7 +6,7 @@ import pandas as pd
 from crewai import Crew, Task, Process
 from langchain.llms import Ollama
 
-from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, COLUMN_NAMES, INAT_MCP_URL
+from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_KEEP_ALIVE, COLUMN_NAMES, INAT_MCP_URL
 from .agents import (
     ZoneValidator, CountryValidator, StateValidator, CountyValidator,
     FamilyValidator, GenusValidator, SpeciesValidator, SubspeciesValidator,
@@ -22,11 +22,21 @@ class LepSocValidationCrew:
 
     def __init__(self, ollama_url: str = OLLAMA_BASE_URL, ollama_model: str = OLLAMA_MODEL,
                  inat_url: str = INAT_MCP_URL, use_inat: bool = True):
-        # Initialize Ollama LLM
+        # Initialize Ollama LLM with timeout and keep_alive settings
         self.llm = Ollama(
             model=ollama_model,
-            base_url=ollama_url
+            base_url=ollama_url,
+            timeout=OLLAMA_TIMEOUT,  # Timeout in seconds
+            keep_alive=OLLAMA_KEEP_ALIVE  # Keep model loaded in memory (e.g., "10m")
         )
+
+        # Pre-load model into memory with a warm-up call
+        try:
+            print(f"Pre-loading model {ollama_model}...")
+            self.llm.invoke("warmup")  # Simple call to load model into memory
+            print("✓ Model pre-loaded and ready")
+        except Exception as e:
+            print(f"⚠ Warning: Could not pre-load model: {e}")
 
         # Initialize iNaturalist validator (shared across all validators)
         # Use mock_mode if iNat is disabled or unavailable
