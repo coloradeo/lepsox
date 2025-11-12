@@ -29,6 +29,7 @@ from .metadata import (
     NameValidator,
     CommentValidator
 )
+from .qa_agent import RecordQAAgent
 
 __all__ = [
     "BaseValidator",
@@ -48,4 +49,5 @@ __all__ = [
     "LocationValidator",
     "NameValidator",
     "CommentValidator",
+    "RecordQAAgent",
 ]

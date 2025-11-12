@@ -6,13 +6,14 @@ import pandas as pd
 from crewai import Crew, Task, Process
 from langchain.llms import Ollama
 
-from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_KEEP_ALIVE, COLUMN_NAMES, INAT_MCP_URL
+from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_KEEP_ALIVE, OLLAMA_TEMPERATURE, COLUMN_NAMES, INAT_MCP_URL
 from .agents import (
     ZoneValidator, CountryValidator, StateValidator, CountyValidator,
     FamilyValidator, GenusValidator, SpeciesValidator, SubspeciesValidator,
     FirstDateValidator, LastDateValidator, YearValidator,
     StateRecordValidator, CountyRecordValidator,
-    LocationValidator, NameValidator, CommentValidator
+    LocationValidator, NameValidator, CommentValidator,
+    RecordQAAgent
 )
 from .integrations import INatValidator
 
@@ -22,12 +23,13 @@ class LepSocValidationCrew:
 
     def __init__(self, ollama_url: str = OLLAMA_BASE_URL, ollama_model: str = OLLAMA_MODEL,
                  inat_url: str = INAT_MCP_URL, use_inat: bool = True):
-        # Initialize Ollama LLM with timeout and keep_alive settings
+        # Initialize Ollama LLM with timeout, keep_alive, and temperature settings
         self.llm = Ollama(
             model=ollama_model,
             base_url=ollama_url,
             timeout=OLLAMA_TIMEOUT,  # Timeout in seconds
-            keep_alive=OLLAMA_KEEP_ALIVE  # Keep model loaded in memory (e.g., "10m")
+            keep_alive=OLLAMA_KEEP_ALIVE,  # Keep model loaded in memory (e.g., "10m")
+            temperature=OLLAMA_TEMPERATURE  # Lower temperature reduces hallucinations
         )
 
         # Pre-load model into memory with a warm-up call
@@ -44,6 +46,9 @@ class LepSocValidationCrew:
 
         # Create all validation agents
         self.validators = self._create_validators()
+
+        # Initialize QA agent for final cross-row validations
+        self.qa_agent = RecordQAAgent()
 
         # Column mapping
         self.column_names = COLUMN_NAMES
@@ -219,6 +224,13 @@ class LepSocValidationCrew:
 
         # Filter dataframe to only include non-blank rows
         df_filtered = df.loc[valid_indices].reset_index(drop=True)
+
+        # Run final QA checks for cross-row validation rules
+        print("\n" + "="*50)
+        print("Running final QA checks...")
+        print("="*50)
+        all_results = self.qa_agent.validate_record_uniqueness(df_filtered, all_results)
+        print("✓ QA checks complete")
 
         # Apply corrections and create dual-column output
         validated_df = self._apply_corrections(df_filtered, all_results)

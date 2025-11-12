@@ -34,10 +34,13 @@ NOTE: City names provide useful context - keep them if you can fit within 50 cha
 
 Format Rules:
 - CRITICAL: Maximum 50 characters - count carefully!
+- CRITICAL: NO HALLUCINATIONS - Use ONLY information from the original location text
+- NEVER add intersections, road numbers, or details not present in the original
+- If information is unclear or missing, omit it rather than guessing
 - FIRST: Include all permanent landmarks with abbreviations
 - THEN: If space remains, add city/town names for context
 - Remove filler words: "at", "the", "located at", "in the vicinity of", "intersection of"
-- Use slash notation for intersections: CR70/SH74
+- Use slash notation for intersections: CR70/SH74 (ONLY if both roads are in original)
 - NO ELLIPSIS (...) - abbreviate instead
 - Use remaining space wisely - add helpful context if under 50 chars
 
