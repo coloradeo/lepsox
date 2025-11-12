@@ -14,15 +14,32 @@ from ..config import GPS_DECIMAL_PATTERN, GPS_DMS_PATTERN, COMMENT_STYLE_GUIDE, 
 LOCATION_STYLE_GUIDE = """
 LepSoc Specific Location Guidelines:
 
+GOAL: Someone must be able to find this exact location decades from now.
+
+Priority Order (keep higher priority items when making tradeoffs):
+1. PERMANENT LANDMARKS (MUST include):
+   - Geographic features: lakes, rivers, creeks, mountains, ridges
+   - Major road intersections: CR70/SH74, Hwy 61/CR 5
+   - GPS coordinates (if present)
+   - Mile markers on major roads
+2. SEMI-PERMANENT (keep if space allows):
+   - Named roads and trails (these persist for decades)
+   - Public parks and natural areas
+   - City/town names (helpful context, keep if room permits)
+3. TEMPORARY (remove first when space is tight):
+   - Business names: lodges, campgrounds, stores (remove these first)
+   - Campground/trail site numbers (can change)
+
+NOTE: City names provide useful context - keep them if you can fit within 50 chars after including permanent landmarks.
+
 Format Rules:
 - CRITICAL: Maximum 50 characters - count carefully!
-- Use aggressive abbreviations to preserve key information
-- Remove city/town names (already in County/State fields)
-- Remove unnecessary words: "at", "the", "located at", "in the vicinity of", "intersection of"
-- Keep essential identifiers: road names, landmarks, intersections
+- FIRST: Include all permanent landmarks with abbreviations
+- THEN: If space remains, add city/town names for context
+- Remove filler words: "at", "the", "located at", "in the vicinity of", "intersection of"
 - Use slash notation for intersections: CR70/SH74
-- Preserve GPS coordinates if present (decimal format preferred)
-- NO ELLIPSIS (...) - use abbreviations to fit within 50 chars
+- NO ELLIPSIS (...) - abbreviate instead
+- Use remaining space wisely - add helpful context if under 50 chars
 
 Abbreviation Rules:
 - Geographic: "Lake" → "Lk", "River" → "Rv", "Creek" → "Cr", "Mountain" → "Mt"
@@ -30,16 +47,18 @@ Abbreviation Rules:
 - Road designations: "County Road" → "CR", "State Highway" → "SH", "State Route" → "SR"
 - Directions: "near" → "nr", "north of" → "N of", "east" → "E", "west" → "W"
 - Locations: "Campground" → "CG", "Site" → "S", "mile marker" → "mi"
-- Distance: Remove spaces in measurements: "5 KM ESE" → "5KM ESE"
+- Distance: Remove spaces: "5 KM ESE" → "5KM ESE"
 
 Examples (MUST be 50 characters or less):
-- "Round Lake Road near Tuscarora Lodge at the intersection of County Road 70 and State Highway 74, 5 KM ESE of Fredricksburg" → "Round Lk Rd nr Tuscarora Lodge, 5KM ESE CR70/SH74"
-- "Bob Richardson Campground Site 22" → "Bob Richardson CG S22"
-- "near Plouff Creek County Park" → "nr Plouff Cr County Park"
-- "North of Woodman Creek area" → "N of Woodman Cr"
-- "Highway 61 at mile marker 15" → "Hwy 61 mi 15"
+- "Round Lake Road near Tuscarora Lodge at the intersection of County Road 70 and State Highway 74, 5 KM ESE of Fredricksburg"
+  → "Round Lk Rd CR70/SH74, 5KM ESE of Fredricksburg" (49 chars - keeps permanent intersection AND city since space allows)
+- "Bob Richardson Campground Site 22 near Gooseberry Falls"
+  → "nr Gooseberry Falls, S22" (25 chars - permanent geographic feature prioritized)
+- "near Plouff Creek, County Park" → "nr Plouff Cr" (13 chars - creek is permanent)
+- "North of Woodman Creek area" → "N of Woodman Cr" (15 chars)
+- "Highway 61 at mile marker 15" → "Hwy 61 mi 15" (12 chars)
 
-Key Principle: Maximize information density. Keep intersections and landmarks, remove redundant city names.
+Key Principle: Prioritize findability 50+ years from now. Geographic features and road numbers outlast businesses.
 """
 
 
