@@ -65,9 +65,16 @@ class LocationValidator(BaseValidator):
             # Use LLM to automatically shorten
             try:
                 shortened = self.execute_ai_task(
-                    description=f"Shorten this location to max 50 characters: '{location}'",
+                    description=f"Shorten this location to EXACTLY 50 characters or less. CRITICAL: Your response MUST be 50 characters or less. Location: '{location}'",
                     context=LOCATION_STYLE_GUIDE
-                )
+                ).strip()
+
+                # Validate LLM output length
+                if len(shortened) > 50:
+                    # LLM failed to follow instructions, truncate intelligently
+                    result.warnings.append(f"LLM output too long ({len(shortened)} chars), truncating")
+                    shortened = shortened[:47] + "..."
+
                 result.correction = shortened
                 result.correction_type = "correction"  # LLM shortening is a real correction
                 result.metadata['ai_shortened'] = True
