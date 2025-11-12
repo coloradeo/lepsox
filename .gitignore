@@ -88,3 +88,5 @@ tmp/
 
 # Keep directory structure
 !.gitkeep
+.serena/
+scripts/verify_state_record_fix.py

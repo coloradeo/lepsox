@@ -7,14 +7,16 @@ import asyncio
 
 from .base import BaseValidator
 from ..models.validation_result import ValidationResult
-from ..config import COMMON_FAMILIES
 
 
 class FamilyValidator(BaseValidator):
-    """Agent 4: Validate Family field (Column D)"""
+    """Agent 4: Validate Family field (Column D)
+
+    Validates family names against iNaturalist taxonomy.
+    """
 
     def __init__(self, llm, inat_validator=None):
-        super().__init__('Family', llm=llm, use_ai=True)
+        super().__init__('Family', llm=llm, requires="inat")
         self.inat_validator = inat_validator
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
@@ -27,15 +29,37 @@ class FamilyValidator(BaseValidator):
 
         family = str(value).strip()
 
+        # Normalize to capitalized first letter (e.g., CRAMBIDAE → Crambidae)
+        family_normalized = family.capitalize()
+        if family != family_normalized:
+            result.correction = family_normalized
+            result.correction_type = "normalization"  # Case normalization, not a real correction
+
         # Check length
         if len(family) > 20:
             result.is_valid = False
             result.errors.append(f"Family exceeds 20 characters: {len(family)}")
 
-        # Check if it's a known Lepidoptera family
-        if family not in COMMON_FAMILIES:
-            result.warnings.append(f"Uncommon family name: {family}. Please verify.")
-            result.metadata['needs_inat_check'] = True
+        # Validate against iNaturalist taxonomy
+        if self.inat_validator:
+            try:
+                # Search for family name in iNat
+                inat_result = asyncio.run(
+                    self.inat_validator.check_species(family_normalized, "", None)
+                )
+
+                if inat_result.get('valid'):
+                    # Family found in iNat
+                    result.metadata['inat_taxon_id'] = inat_result.get('taxon_id')
+                    result.metadata['inat_rank'] = inat_result.get('rank')
+                else:
+                    # Family not found - mark as ERROR
+                    result.is_valid = False
+                    result.errors.append(f"Family '{family_normalized}' not found in iNaturalist")
+                    result.metadata['needs_human_review'] = True
+
+            except Exception as e:
+                result.warnings.append(f"Could not verify family with iNaturalist: {str(e)}")
 
         return result
 
@@ -44,7 +68,7 @@ class GenusValidator(BaseValidator):
     """Agent 5: Validate Genus field (Column E)"""
 
     def __init__(self, llm, inat_validator=None):
-        super().__init__('Genus', llm=llm, use_ai=True)
+        super().__init__('Genus', llm=llm, requires="inat")
         self.inat_validator = inat_validator
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
@@ -57,15 +81,16 @@ class GenusValidator(BaseValidator):
 
         genus = str(value).strip()
 
+        # Normalize to capitalized first letter (e.g., DANAUS → Danaus, danaus → Danaus)
+        genus_normalized = genus.capitalize()
+        if genus != genus_normalized:
+            result.correction = genus_normalized
+            result.correction_type = "normalization"  # Case normalization, not a real correction
+
         # Check length
         if len(genus) > 20:
             result.is_valid = False
             result.errors.append(f"Genus exceeds 20 characters: {len(genus)}")
-
-        # Check capitalization
-        if genus and not genus[0].isupper():
-            result.warnings.append("Genus should start with capital letter")
-            result.correction = genus.capitalize()
 
         result.metadata['needs_inat_check'] = True
         return result
@@ -79,7 +104,7 @@ class SpeciesValidator(BaseValidator):
     """
 
     def __init__(self, llm, inat_validator=None):
-        super().__init__('Species', llm=llm, use_ai=True)
+        super().__init__('Species', llm=llm, requires="inat")
         self.inat_validator = inat_validator
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
@@ -100,6 +125,7 @@ class SpeciesValidator(BaseValidator):
         # Species epithet should be lowercase
         if species != str(value).strip():
             result.correction = species
+            result.correction_type = "normalization"  # Case normalization, not a real correction
 
         # iNaturalist validation if validator is provided
         if self.inat_validator and row_data:
@@ -115,8 +141,13 @@ class SpeciesValidator(BaseValidator):
 
                     if inat_result.get('valid'):
                         # Species found in iNat
-                        result.metadata['inat_taxon_id'] = inat_result.get('taxon_id')
+                        taxon_id = inat_result.get('taxon_id')
+                        result.metadata['inat_taxon_id'] = taxon_id
                         result.metadata['inat_common_name'] = inat_result.get('common_name')
+
+                        # Store in row_data for use by record validators
+                        if row_data is not None:
+                            row_data['_inat_taxon_id'] = taxon_id
 
                         # Check hierarchy
                         if inat_result.get('hierarchy_mismatch'):
@@ -127,8 +158,9 @@ class SpeciesValidator(BaseValidator):
                             result.metadata['suggested_family'] = inat_result['suggested_family']
 
                     else:
-                        # Species not found
-                        result.warnings.append(f"Species '{genus} {species}' not found in iNaturalist")
+                        # Species not found - mark as ERROR
+                        result.is_valid = False
+                        result.errors.append(f"Species '{genus} {species}' not found in iNaturalist")
                         result.metadata['needs_human_review'] = True
 
                 except Exception as e:
@@ -144,7 +176,7 @@ class SubspeciesValidator(BaseValidator):
     """
 
     def __init__(self, llm, inat_validator=None):
-        super().__init__('Sub-species', llm=llm, use_ai=True)
+        super().__init__('Sub-species', llm=llm, requires="inat")
         self.inat_validator = inat_validator
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
@@ -164,6 +196,7 @@ class SubspeciesValidator(BaseValidator):
         # Should be lowercase
         if subspecies != str(value).strip():
             result.correction = subspecies
+            result.correction_type = "normalization"  # Case normalization, not a real correction
 
         # iNaturalist validation for trinomial name if validator is provided
         if self.inat_validator and row_data:
@@ -193,8 +226,9 @@ class SubspeciesValidator(BaseValidator):
                             )
                             result.metadata['suggested_family'] = inat_result['suggested_family']
                     else:
-                        # Trinomial not found
-                        result.warnings.append(
+                        # Trinomial not found - mark as ERROR
+                        result.is_valid = False
+                        result.errors.append(
                             f"Subspecies '{trinomial}' not found in iNaturalist"
                         )
                         result.metadata['needs_human_review'] = True

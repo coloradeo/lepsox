@@ -21,7 +21,7 @@ class LepSocValidationCrew:
     """Main CrewAI orchestrator for validation"""
 
     def __init__(self, ollama_url: str = OLLAMA_BASE_URL, ollama_model: str = OLLAMA_MODEL,
-                 inat_url: str = INAT_MCP_URL):
+                 inat_url: str = INAT_MCP_URL, use_inat: bool = True):
         # Initialize Ollama LLM
         self.llm = Ollama(
             model=ollama_model,
@@ -29,7 +29,8 @@ class LepSocValidationCrew:
         )
 
         # Initialize iNaturalist validator (shared across all validators)
-        self.inat_validator = INatValidator(server_url=inat_url)
+        # Use mock_mode if iNat is disabled or unavailable
+        self.inat_validator = INatValidator(server_url=inat_url, mock_mode=not use_inat)
 
         # Create all validation agents
         self.validators = self._create_validators()
@@ -40,9 +41,9 @@ class LepSocValidationCrew:
     def _create_validators(self) -> List:
         """Create all 16 validation agents
 
-        Simple deterministic validators (use_ai=False) don't need LLM.
-        AI-powered validators (taxonomic, comments) need LLM for intelligence.
-        Taxonomic validators also get iNat validator for species verification.
+        - Deterministic validators (7): Zone, Country, State, FirstDate, LastDate, Name, Year
+        - iNat-powered validators (7): Family, Genus, Species, Subspecies, County, StateRecord, CountyRecord
+        - LLM-powered validators (2): Location shortening, Comment standardization
         """
         validators = [
             # Geographic (deterministic)
@@ -59,12 +60,12 @@ class LepSocValidationCrew:
             # Geographic (deterministic, but with iNat location validation)
             CountyValidator(self.inat_validator),
 
-            # Records (deterministic)
-            StateRecordValidator(),
-            CountyRecordValidator(),
+            # Records (iNat-powered for record status verification)
+            StateRecordValidator(self.inat_validator),
+            CountyRecordValidator(self.inat_validator),
 
-            # Metadata (location and name are deterministic)
-            LocationValidator(),
+            # Metadata (location uses LLM for auto-shortening)
+            LocationValidator(self.llm),
 
             # Temporal (deterministic)
             FirstDateValidator(),
@@ -103,23 +104,11 @@ class LepSocValidationCrew:
             'warnings': [],
             'corrections': {},
             'metadata': {},
-            'needs_review': False
+            'needs_review': False,
+            'field_results': {}  # Store individual field results for coloring
         }
 
-        # Create tasks for each field
-        tasks = []
-        for i, (col_name, validator) in enumerate(zip(self.column_names, self.validators)):
-            value = row_data.iloc[i] if i < len(row_data) else None
-
-            # Create validation task
-            task = Task(
-                description=f'Validate {col_name} field with value: {value}',
-                agent=validator,
-                expected_output='Validation result with any errors or corrections'
-            )
-            tasks.append(task)
-
-        # Create and run crew (simple sequential processing for now)
+        # Run validators directly (no CrewAI Crew needed - validators are simple Python classes)
         try:
             # Run validators directly
             for i, (col_name, validator) in enumerate(zip(self.column_names, self.validators)):
@@ -127,6 +116,9 @@ class LepSocValidationCrew:
 
                 # Run validation
                 result = validator.validate(value, row_dict)
+
+                # Store field result for coloring logic
+                validation_results['field_results'][col_name] = result
 
                 # Process results
                 if not result.is_valid:
@@ -174,12 +166,19 @@ class LepSocValidationCrew:
         else:
             df = pd.read_csv(filepath, header=None)
 
-        # Ensure we have 16 columns
+        # Detect and skip header row (if first row contains column names)
+        if df.iloc[0].astype(str).str.contains('Zone|Country|State|Family|Genus', case=False, na=False).any():
+            print("Detected header row, skipping...")
+            df = df.iloc[1:].reset_index(drop=True)
+
+        # Handle fewer than 16 columns by padding with empty values
         if len(df.columns) < 16:
-            raise ValueError(f"File must have 16 columns, found {len(df.columns)}")
+            print(f"File has {len(df.columns)} columns, padding to 16...")
+            for i in range(len(df.columns), 16):
+                df[i] = ''
 
         # Rename columns
-        df.columns = self.column_names[:len(df.columns)]
+        df.columns = self.column_names
 
         # Validation results
         all_results = []
@@ -200,13 +199,13 @@ class LepSocValidationCrew:
             if result['corrections']:
                 print(f"  ✓ Corrections: {len(result['corrections'])} fields")
 
-        # Apply corrections and add metadata columns
+        # Apply corrections and create dual-column output
         validated_df = self._apply_corrections(df, all_results)
 
-        # Save output
+        # Save output with color coding
         if output_path:
             if output_path.endswith('.xlsx'):
-                validated_df.to_excel(output_path, index=False)
+                self._save_excel_with_colors(df, validated_df, all_results, output_path)
             else:
                 validated_df.to_csv(output_path, index=False)
             print(f"\n✓ Validated file saved to: {output_path}")
@@ -217,54 +216,81 @@ class LepSocValidationCrew:
         return validated_df
 
     def _apply_corrections(self, df: pd.DataFrame, results: List[Dict]) -> pd.DataFrame:
-        """Apply corrections and add metadata columns"""
+        """Apply corrections to create corrected dataframe"""
         validated_df = df.copy()
 
-        # Add metadata columns
-        validated_df['Validation_Status'] = ''
-        validated_df['Validation_Notes'] = ''
-        validated_df['Original_Values'] = ''
-        validated_df['Confidence_Score'] = ''
-        validated_df['Validated_By'] = ''
-
         for i, result in enumerate(results):
-            # Set validation status
-            if result['is_valid'] and not result['corrections']:
-                validated_df.loc[i, 'Validation_Status'] = 'PASS'
-            elif result['corrections']:
-                validated_df.loc[i, 'Validation_Status'] = 'CORRECTED'
-            else:
-                validated_df.loc[i, 'Validation_Status'] = 'FAIL'
-
             # Apply corrections
-            original_values = []
             for field, correction in result['corrections'].items():
                 if field in validated_df.columns:
-                    original = validated_df.loc[i, field]
-                    if str(original) != str(correction):
-                        original_values.append(f"{field}: {original}")
-                        validated_df.loc[i, field] = correction
-
-            # Set metadata
-            if result['errors']:
-                validated_df.loc[i, 'Validation_Notes'] = '; '.join(result['errors'][:3])
-            elif result['warnings']:
-                validated_df.loc[i, 'Validation_Notes'] = '; '.join(result['warnings'][:3])
-
-            if original_values:
-                validated_df.loc[i, 'Original_Values'] = '; '.join(original_values)
-
-            validated_df.loc[i, 'Validated_By'] = 'CrewAI Agent'
-
-            # Set confidence based on status
-            if result['is_valid'] and not result['corrections']:
-                validated_df.loc[i, 'Confidence_Score'] = '1.0'
-            elif result['corrections']:
-                validated_df.loc[i, 'Confidence_Score'] = '0.8'
-            else:
-                validated_df.loc[i, 'Confidence_Score'] = '0.5'
+                    validated_df.loc[i, field] = correction
 
         return validated_df
+
+    def _save_excel_with_colors(self, original_df: pd.DataFrame, corrected_df: pd.DataFrame,
+                                 results: List[Dict], output_path: str):
+        """Save Excel file with corrected columns (left) and original columns (right) with color coding
+
+        Color coding (left side only):
+        - Red: Error with no correction available
+        - Orange: Correction applied
+        - Yellow: Warning only
+        """
+        from openpyxl import Workbook
+        from openpyxl.styles import PatternFill
+
+        wb = Workbook()
+        ws = wb.active
+
+        # Define colors
+        RED_FILL = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")  # Light red
+        ORANGE_FILL = PatternFill(start_color="FFD699", end_color="FFD699", fill_type="solid")  # Light orange
+        YELLOW_FILL = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")  # Light yellow
+
+        # Write headers (duplicated: corrected + original)
+        headers = list(corrected_df.columns)
+        ws.append(headers + headers)  # Double the headers
+
+        # Write data rows
+        for idx in range(len(corrected_df)):
+            # Get row data
+            corrected_row = corrected_df.iloc[idx].tolist()
+            original_row = original_df.iloc[idx].tolist()
+
+            # Append combined row (corrected + original)
+            ws.append(corrected_row + original_row)
+
+            # Apply color coding to corrected columns (left side only)
+            result = results[idx]
+            row_num = idx + 2  # +1 for header, +1 for 1-based indexing
+
+            for col_idx, field in enumerate(headers):
+                cell = ws.cell(row=row_num, column=col_idx + 1)
+
+                # Determine color based on validation result
+                color = None
+
+                # Check if field has validation results
+                if result['field_results'].get(field):
+                    field_result = result['field_results'][field]
+
+                    # Precedence: Red > Orange > Yellow
+                    # Red: Error with no correction
+                    if not field_result.is_valid and field not in result['corrections']:
+                        color = RED_FILL
+                    # Orange: Actual correction applied (not just normalization)
+                    elif field in result['corrections'] and field_result.correction_type == "correction":
+                        color = ORANGE_FILL
+                    # Yellow: Warning only (valid but has warnings)
+                    elif field_result.is_valid and field_result.warnings:
+                        color = YELLOW_FILL
+
+                # Apply color
+                if color:
+                    cell.fill = color
+
+        # Save workbook
+        wb.save(output_path)
 
     def _print_summary(self, results: List[Dict]):
         """Print validation summary"""

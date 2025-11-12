@@ -7,14 +7,46 @@ import re
 
 from .base import BaseValidator
 from ..models.validation_result import ValidationResult
-from ..config import GPS_DECIMAL_PATTERN, GPS_DMS_PATTERN, COMMENT_STYLE_GUIDE
+from ..config import GPS_DECIMAL_PATTERN, GPS_DMS_PATTERN, COMMENT_STYLE_GUIDE, LEPIDOPTERIST_ABBREVIATIONS
+
+
+# Location shortening guidelines for LLM
+LOCATION_STYLE_GUIDE = """
+LepSoc Specific Location Guidelines:
+
+Format Rules:
+- Maximum 50 characters
+- Use standard abbreviations: nr (near), N of (north of), S of, E of, W of
+- Remove unnecessary words: "at", "the", "located at", "in the vicinity of"
+- Keep essential geographic identifiers: road names, trail names, landmarks
+- Preserve GPS coordinates if present (use decimal format)
+- Remove county/state names (already in other fields)
+
+Abbreviation Priority:
+- Direction: "north of" → "N of", "near" → "nr"
+- Road types: "Road" → "Rd", "Highway" → "Hwy", "Trail" → "Tr"
+- Geographic: "River" → "Rv", "Creek" → "Cr", "Lake" → "Lk", "Mountain" → "Mt"
+- Campground: "Campground" → "CG", "Site" → "S"
+
+Examples:
+- "Bob Richardson Campground Site 22" → "Bob Richardson CG S22"
+- "near Plouff Creek Count" → "nr Plouff Cr Count"
+- "North of Woodman Creek area" → "N of Woodman Cr"
+- "Highway 61 at mile marker 15" → "Hwy 61 mi 15"
+
+Key Principle: Keep location identifiable but concise. Remove fluff, keep substance.
+"""
 
 
 class LocationValidator(BaseValidator):
-    """Agent 11: Validate Specific Location field (Column K)"""
+    """Agent 11: Validate Specific Location field (Column K)
 
-    def __init__(self):
-        super().__init__('Specific Location', use_ai=False)
+    Uses LLM to automatically shorten locations exceeding 50 characters
+    according to lepidopterist location conventions.
+    """
+
+    def __init__(self, llm):
+        super().__init__('Specific Location', llm=llm, requires="llm")
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -29,7 +61,20 @@ class LocationValidator(BaseValidator):
         if len(location) > 50:
             result.is_valid = False
             result.errors.append(f"Location exceeds 50 characters: {len(location)}")
-            result.metadata['overflow_to_comments'] = location[50:]
+
+            # Use LLM to automatically shorten
+            try:
+                shortened = self.execute_ai_task(
+                    description=f"Shorten this location to max 50 characters: '{location}'",
+                    context=LOCATION_STYLE_GUIDE
+                )
+                result.correction = shortened
+                result.correction_type = "correction"  # LLM shortening is a real correction
+                result.metadata['ai_shortened'] = True
+            except Exception as e:
+                result.errors.append(f"Could not automatically shorten location: {str(e)}")
+                # Fallback: just truncate with ellipsis
+                result.metadata['overflow_to_comments'] = location[50:]
 
         return result
 
@@ -38,7 +83,7 @@ class NameValidator(BaseValidator):
     """Agent 14: Validate Name field (Column N)"""
 
     def __init__(self):
-        super().__init__('Name', use_ai=False)
+        super().__init__('Name')
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -66,7 +111,7 @@ class CommentValidator(BaseValidator):
     """
 
     def __init__(self, llm):
-        super().__init__('Comments', llm=llm, use_ai=True)
+        super().__init__('Comments', llm=llm, requires="llm")
 
     def validate(self, value: Any, row_data: Dict = None) -> ValidationResult:
         result = ValidationResult(self.field_name, value)
@@ -95,6 +140,7 @@ class CommentValidator(BaseValidator):
                     context=COMMENT_STYLE_GUIDE
                 )
                 result.correction = shortened
+                result.correction_type = "correction"  # LLM shortening is a real correction
                 result.metadata['ai_shortened'] = True
             except Exception as e:
                 result.errors.append(f"Could not automatically shorten comment: {str(e)}")

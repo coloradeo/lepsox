@@ -1,9 +1,9 @@
 """
 Base validator class for all field validators
 
-Supports both deterministic (pure Python) and AI-powered validation.
+Supports deterministic (pure Python), LLM-powered, and iNat-powered validation.
 """
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Literal
 from crewai import Agent, Task
 
 from ..models.validation_result import ValidationResult
@@ -13,29 +13,31 @@ class BaseValidator:
     """
     Base class for all validation agents
 
-    Supports both deterministic and AI-powered validation:
-    - use_ai=False: Simple Python logic, fast, no LLM needed
-    - use_ai=True: Uses CrewAI Agent for complex tasks (via composition)
+    Supports three validation modes:
+    - requires=None: Simple Python logic, fast, no external services
+    - requires="llm": Uses Ollama LLM via CrewAI for complex reasoning
+    - requires="inat": Uses iNaturalist MCP for species/location validation
     """
 
-    def __init__(self, field_name: str, llm: Optional[Any] = None, use_ai: bool = False):
+    def __init__(self, field_name: str, llm: Optional[Any] = None,
+                 requires: Optional[Literal["llm", "inat"]] = None):
         """
         Initialize validator
 
         Args:
             field_name: Name of field being validated
-            llm: Optional LLM instance (required if use_ai=True)
-            use_ai: Whether this validator uses AI for validation
+            llm: Optional LLM instance (required if requires="llm")
+            requires: External service requirement - "llm" for Ollama, "inat" for iNat MCP, None for deterministic
         """
         self.field_name = field_name
-        self.use_ai = use_ai
+        self.requires = requires
         self.llm = llm
         self._agent = None  # Composition: hold Agent instance
 
-        # Only initialize CrewAI Agent if we need AI capabilities
-        if use_ai:
+        # Only initialize CrewAI Agent if we need LLM capabilities
+        if requires == "llm":
             if not llm:
-                raise ValueError(f"{field_name}Validator requires llm when use_ai=True")
+                raise ValueError(f"{field_name}Validator requires llm when requires='llm'")
 
             # Create Agent instance (composition, not inheritance)
             self._agent = Agent(
@@ -77,7 +79,7 @@ class BaseValidator:
         """
         Execute an AI task using CrewAI
 
-        Only works if use_ai=True and llm is provided.
+        Only works if requires="llm" and llm is provided.
 
         Args:
             description: Task description for the LLM
@@ -86,9 +88,9 @@ class BaseValidator:
         Returns:
             str: LLM response
         """
-        if not self.use_ai or not self._agent:
+        if self.requires != "llm" or not self._agent:
             raise RuntimeError(f"{self.field_name}Validator.execute_ai_task() "
-                             f"requires use_ai=True and llm to be provided")
+                             f"requires requires='llm' and llm to be provided")
 
         task = Task(
             description=f"{context}\n\n{description}" if context else description,

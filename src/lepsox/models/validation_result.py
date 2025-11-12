@@ -14,6 +14,7 @@ class ValidationResult:
         self.errors: List[str] = []
         self.warnings: List[str] = []
         self.correction: Optional[Any] = None
+        self.correction_type: Optional[str] = None  # "normalization" or "correction"
         self.metadata: Dict[str, Any] = {}
 
     def to_dict(self) -> Dict[str, Any]:
@@ -25,6 +26,7 @@ class ValidationResult:
             'errors': self.errors,
             'warnings': self.warnings,
             'correction': self.correction,
+            'correction_type': self.correction_type,
             'metadata': self.metadata
         }
 
